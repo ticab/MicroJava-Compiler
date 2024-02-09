@@ -1,0 +1,351 @@
+
+package rs.ac.bg.etf.pp1;
+
+import java_cup.runtime.*;
+
+import org.apache.log4j.*;
+import rs.ac.bg.etf.pp1.ast.*;
+
+parser code {:
+
+	Logger log = Logger.getLogger(getClass());
+	
+	boolean errorDetected;
+   
+    // slede redefinisani metodi za prijavu gresaka radi izmene teksta poruke
+     
+    public void report_fatal_error(String message, Object info) throws java.lang.Exception {
+      done_parsing();
+      report_error(message, info);
+    }
+  
+    public void syntax_error(Symbol cur_token) {
+        report_error("\nSintaksna greska", cur_token);
+    }
+  
+    public void unrecovered_syntax_error(Symbol cur_token) throws java.lang.Exception {
+        report_fatal_error("Fatalna greska, parsiranje se ne moze nastaviti", cur_token);
+    }
+
+    public void report_error(String message, Object info) {
+		errorDetected = true;
+    	StringBuilder msg = new StringBuilder(message); 
+    	if (info instanceof Symbol)
+            msg.append (" na liniji ").append(((Symbol)info).left);
+        log.error(msg.toString());
+    }
+
+
+:}
+
+init with{:
+	errorDetected = false;
+
+:}
+
+scan with {:
+	Symbol s = this.getScanner().next_token();
+	if (s != null && s.value != null) 
+		log.info(s.toString() + " " + s.value.toString());
+	return s;
+:}
+
+
+
+terminal PROG, CONST, VOID, NAMESPACE, NEW, PRINT, READ; 
+
+terminal LPAREN, RPAREN, LSQUARE, RSQUARE, LCURLY, RCURLY; 
+
+terminal DOUBLEC, SEMI, COMMA, ASSIGN; 
+
+terminal IF, ELSE, FOR, BREAK, CONTINUE, RETURN;
+
+terminal Character CHAR;  
+terminal Boolean BOOL; 
+terminal Integer NUMBER; 
+terminal String IDENT; 
+
+terminal PLUS, MINUS, INC, DEC, MUL, DIV, MOD, AND, OR; 
+
+terminal EQUAL, NOT_EQ, LESS, GREATER, GREATER_EQ, LESS_EQ; 
+
+nonterminal rs.etf.pp1.symboltable.concepts.Obj ProgName, Program; 
+nonterminal AllDecl; 
+
+nonterminal NamespaceList, Namespace;
+nonterminal rs.etf.pp1.symboltable.concepts.Obj NamespaceName;
+
+nonterminal ConstDecl, ConstType, ConstValueEq, ConstValType, MultipleConstDecl; 
+
+nonterminal VarDecl, VarDeclType, VarDeclList, MultVar, OneVar; 
+
+nonterminal MethodDeclList, MethodVarDecl; 
+nonterminal rs.etf.pp1.symboltable.concepts.Obj MethodDecl, MethodFullName; 
+nonterminal rs.etf.pp1.symboltable.concepts.Struct MethodReturn; 
+
+nonterminal FormPars, FormalParamList, FormalParamDecl, ArrayLR; 
+
+nonterminal rs.etf.pp1.symboltable.concepts.Struct Type; 
+
+nonterminal Statement, StatementList, IfCondition, StartIf, EndIf, EmptyIfElse; 
+nonterminal ForStatement, ForCondFact, ForStatementPart, ForStart, ForStartStm, ForStartInc, ForCondStart, ForEndInc;
+
+nonterminal DesignatorStatement, DesSt, DesStList, DesignatorStatementList, DesStStart; 
+nonterminal rs.etf.pp1.symboltable.concepts.Obj FunctionCallName;  
+
+nonterminal ActPars, ActParamList; 
+nonterminal Condition, CondTerm, CondFact, OrBlock;
+
+nonterminal rs.etf.pp1.symboltable.concepts.Struct Factors, Factor, Term, Expr; 
+
+nonterminal rs.etf.pp1.symboltable.concepts.Obj Designator; 
+nonterminal rs.etf.pp1.symboltable.concepts.Obj PreDesignator;
+
+/* nonterminal Label; */
+
+nonterminal Relop, Addop, Mulop; 
+
+precedence left ELSE;
+
+
+Program ::= (Program) PROG ProgName:p NamespaceList AllDecl LCURLY MethodDeclList RCURLY;
+
+ProgName ::= (ProgName) IDENT:progName;
+
+AllDecl ::= (VarDeclarations) AllDecl VarDecl
+			| (ConstDeclarations) AllDecl ConstDecl
+			| (NoDeclarations) ;
+			
+NamespaceList ::= (WithNamespace) NamespaceList Namespace
+				| (WithoutNamespace) ;
+						
+/*---------------------------------------------------------------*/
+
+Namespace ::= (Namespace) NamespaceName LCURLY AllDecl LCURLY MethodDeclList RCURLY RCURLY;
+
+NamespaceName ::= (NamespaceName) NAMESPACE IDENT:namespName;
+
+/*---------------------------------------------------------------*/
+
+ConstDecl ::= (ConstDecl) CONST ConstType ConstValueEq MultipleConstDecl SEMI;
+
+ConstType ::= (ConstType) Type:constType;
+
+ConstValueEq ::= (ConstValueEq) IDENT:constName ASSIGN ConstValType ;
+
+ConstValType ::= (IntVal) NUMBER:numberConstValue 
+				| (CharVal) CHAR:charConstValue
+				| (BoolVal) BOOL:boolConstValue ;
+
+MultipleConstDecl ::= (WithConstDecl) MultipleConstDecl COMMA ConstValueEq
+					| (WithoutConstDecl) ;
+									
+/*---------------------------------------------------------------*/
+
+VarDecl ::= (VarDecl) VarDeclType VarDeclList;
+
+VarDeclType ::= (VarDeclType) Type:varType;
+
+VarDeclList ::= (MultipleVarDecl) MultVar VarDeclList
+				| (SingleVarDecl) OneVar ;
+
+MultVar ::= (VarFromMultiple) IDENT:varName ArrayLR COMMA
+   				   | (ErrorMulteVar) error COMMA ;
+
+OneVar ::= (OneVarDec) IDENT:varName ArrayLR SEMI
+				| (ErrorOneVar) error SEMI ;
+		
+/*---------------------------------------------------------------*/
+
+MethodDeclList ::= (MultipleMethodDecl) MethodDeclList MethodDecl
+				   | (EmptyMethodDeclList) ;
+
+MethodDecl ::= (MethodDecl) MethodFullName LPAREN FormPars MethodVarDecl LCURLY StatementList RCURLY;
+
+MethodFullName ::= (MethodFullName) MethodReturn IDENT:methodName;
+
+MethodReturn ::= (ReturnSomething) Type:returnType
+					 | (ReturnVoid) VOID ;
+
+MethodVarDecl ::= (MethodVars) MethodVarDecl VarDecl
+				  | (NoVarsInMethod) ;
+				  
+/*---------------------------------------------------------------*/
+
+FormPars ::= (FormalParams) FormalParamList
+			 | (NoFormalParams) RPAREN ;
+			
+FormalParamList ::= (MultipleFormalParams) FormalParamDecl COMMA FormalParamList
+	 				
+	 				| (SingleFormalParam) FormalParamDecl RPAREN
+	 				
+	 				| (ErrorInFormalParam) error COMMA FormalParamList
+	 				
+	 				| (ErrorInListOfParams) error RPAREN ;
+
+FormalParamDecl ::= (FormalParamDecl) Type:parameterType IDENT:parameterName ArrayLR;
+
+ArrayLR ::= (IsArray) LSQUARE RSQUARE
+			| (IsntArray) ;
+
+/*---------------------------------------------------------------*/
+
+Type ::= (Type) IDENT:name ; 
+
+/*---------------------------------------------------------------*/
+
+Statement ::= (StatementDesignator) DesignatorStatement SEMI
+				| (ErrorInDesignatorAssignOperation) error SEMI:l
+					{: parser.report_error("Izvrsen oporavak do ; u liniji " + lleft, null); :}
+				
+				| (StatementIf) IfCondition Statement EmptyIfElse
+				
+				| (StatementIfElse) IfCondition Statement EmptyIfElse ELSE Statement
+				
+				| (StatementBreak) BREAK SEMI
+				
+				| (StatementContinue) CONTINUE SEMI
+				
+				| (StatementReturn) RETURN SEMI
+				
+				| (StatementReturnExpr) RETURN Expr:t SEMI
+				
+				| (StatementRead) READ LPAREN Designator RPAREN SEMI 
+				
+				| (PrintStatement) PRINT LPAREN Expr RPAREN SEMI
+				
+				| (PrintStatementWit) PRINT LPAREN Expr COMMA NUMBER:width RPAREN SEMI
+				
+				| (StatementFor) FOR LPAREN ForStart ForStatement RPAREN ForStartStm Statement
+				
+				| (MultipleStatement) LCURLY StatementList RCURLY ;
+			
+				
+StatementList ::= (NonEmptyStement) StatementList Statement
+				  | (NoStatements) ;
+
+IfCondition ::= (IfPart) StartIf LPAREN Condition EndIf 
+				|
+				(ErrorInCondition) StartIf LPAREN error:l {: parser.report_error("Izvrsen oporavak do ) u liniji " + lleft, null); :} EndIf 
+				;
+
+StartIf ::= (StartIf) IF ;
+
+EndIf ::= (EndIf) RPAREN ;
+
+EmptyIfElse ::= (EmptyIfElse) ;
+
+ForStart ::= (ForStart) ;
+
+ForStartStm ::= (ForStartStm) ;
+
+ForStatement ::= (ForStatement) ForStatementPart:arg1 SEMI ForCondStart ForCondFact SEMI ForStartInc ForStatementPart:arg2 ForEndInc; 
+
+ForStartInc ::= (ForStartInc) ;
+
+ForEndInc ::= (ForEndInc) ;
+
+ForCondStart ::= (ForCondStart) ;
+
+ForStatementPart ::= (ForStatementPartWith) DesignatorStatementList
+					| (ForStatementPartEmpty) ;
+
+DesignatorStatementList ::= (MultipleDesStList) DesignatorStatementList COMMA DesignatorStatement
+							| (SignleDesStList) DesignatorStatement ;
+							
+ForCondFact ::= (WithCondFact) CondFact
+				| (EmptyCondFact) ;
+
+/*---------------------------------------------------------------*/
+
+DesignatorStatement ::= (DesignAssign) Designator:dest ASSIGN Expr:e
+						| (DesignFuncCall) FunctionCallName LPAREN ActPars RPAREN 
+						| (DesignPostInc) Designator:variableName INC 
+						| (DesignPostDec) Designator:variableName DEC
+						| (DesignBC) LSQUARE:sq1 DesStStart DesSt MUL Designator RSQUARE ASSIGN Designator:rightDes;
+
+DesSt ::=  (DesStHas) DesSt DesStList
+			| (DesStEmpty) ;
+
+DesStList ::= (DesStWithDes) Designator COMMA
+				| (DesStWithComma) COMMA;
+
+FunctionCallName ::= (FunctionCallName) Designator:functionName;
+
+DesStStart ::= (DesStStart) ;
+
+/*---------------------------------------------------------------*/
+
+ActPars ::= (Act) ActParamList
+			| (NoAct) ;
+			
+ActParamList ::= (MultipleExpr) ActParamList COMMA Expr
+				    | (SingleExpr) Expr ;
+				    
+/*---------------------------------------------------------------*/
+
+Condition ::= (OrOpTermListCondition) Condition OrBlock CondTerm
+			  | (SingleTermCondition) CondTerm ;
+
+CondTerm ::= (AndCondT) CondTerm AND CondFact
+			 | (SingleCondT) CondFact ;
+
+CondFact ::= (RelopCondF) Expr:e1 Relop Expr:e2
+			 | (SingleCondF) Expr:e ;
+			 
+OrBlock ::= (OrBlock) OR ;
+			 
+/*---------------------------------------------------------------*/
+			 
+Expr ::= (NegativeExpr) MINUS Term
+		 | (AddExpr) Expr Addop Term
+		 | (PositiveExpr) Term ;
+
+/*---------------------------------------------------------------*/
+
+Term ::= (Term) Factors ;
+
+/*---------------------------------------------------------------*/
+
+Factors ::= (MulFactors) Factors Mulop Factor
+			| (OneFactor) Factor ;
+				    
+Factor ::= (FactorVar) Designator:variableName
+		   | (FactorFuncCall) FunctionCallName LPAREN ActPars RPAREN
+		   | (FactorNum) NUMBER:constValue
+		   | (FactorChar) CHAR:constValue
+		   | (FactorBool) BOOL:constValue
+		   | (NewArray) NEW Type:arrayName LSQUARE Expr:arrayIndex RSQUARE
+		   | (FactorExpr) LPAREN Expr:innerExpression RPAREN ;
+		   
+/*---------------------------------------------------------------*/
+
+Designator ::= (DesigWithoutExpr) PreDesignator
+				| (DesigWithExpr) PreDesignator LSQUARE Expr RSQUARE ;
+				
+PreDesignator ::= (WithDC) IDENT:name DOUBLEC IDENT:subName
+				| (WithoutDC) IDENT:name ;
+					
+/*---------------------------------------------------------------*/
+				    		
+/* Label ::= (Label) IDENT:labelName; */
+
+/*---------------------------------------------------------------*/
+
+Relop ::= (EqualOper) EQUAL
+		  | (NotEqualOp) NOT_EQ
+		  | (LessOp) LESS
+		  | (GreaterOp) GREATER
+		  | (GreaterEqOp) GREATER_EQ
+		  | (LessEqOp) LESS_EQ ;
+		  
+/*---------------------------------------------------------------*/
+
+Addop ::= (PlusOper) PLUS
+		  | (MinusOper) MINUS ;
+		  
+/*---------------------------------------------------------------*/
+
+Mulop ::= (MulOper) MUL
+		  | (DivOper) DIV
+		  | (ModuoOper) MOD ;
